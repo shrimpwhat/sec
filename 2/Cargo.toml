@@ -1,0 +1,14 @@
+[package]
+name = "main"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+sha1 = "0.10"
+sha2 = "0.10"
+md5 = "0.7"
+hex = "0.4"
+rayon = "1.10"
+wgpu = "22.0"
+pollster = "0.3"
+bytemuck = { version = "1.14", features = ["derive"] }

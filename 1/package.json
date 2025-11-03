@@ -1,0 +1,23 @@
+{
+  "name": "secure-file-manager",
+  "version": "1.0.0",
+  "description": "Безопасный файловый менеджер с интеграцией базы данных SQLite",
+  "module": "index.ts",
+  "type": "module",
+  "scripts": {
+    "start": "bun run index.ts",
+    "test": "bun test"
+  },
+  "private": true,
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "fast-xml-parser": "^5.3.0"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

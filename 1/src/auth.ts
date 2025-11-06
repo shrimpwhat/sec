@@ -1,9 +1,6 @@
-import bcrypt from "bcrypt";
 import { DatabaseManager } from "./database";
 import type { User } from "./database";
 import { InputSanitizer } from "./utils/security";
-
-const SALT_ROUNDS = 10;
 
 /**
  * Authentication service with secure password hashing
@@ -32,8 +29,11 @@ export class AuthService {
       throw new Error("Username already exists");
     }
 
-    // Hash password using bcrypt
-    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    // Hash password using Bun's native bcrypt
+    const passwordHash = await Bun.password.hash(password, {
+      algorithm: "bcrypt",
+      cost: 10,
+    });
 
     // Create user in database
     const userId = this.db.createUser(sanitizedUsername, passwordHash);
@@ -63,8 +63,8 @@ export class AuthService {
       throw new Error("Invalid credentials");
     }
 
-    // Verify password
-    const isValid = await bcrypt.compare(password, user.password_hash);
+    // Verify password using Bun's native bcrypt
+    const isValid = await Bun.password.verify(password, user.password_hash);
     if (!isValid) {
       throw new Error("Invalid credentials");
     }
@@ -104,8 +104,8 @@ export class AuthService {
       throw new Error("No user logged in");
     }
 
-    // Verify old password
-    const isValid = await bcrypt.compare(
+    // Verify old password using Bun's native bcrypt
+    const isValid = await Bun.password.verify(
       oldPassword,
       this.currentUser.password_hash
     );
@@ -116,8 +116,11 @@ export class AuthService {
     // Validate new password
     this.validatePassword(newPassword);
 
-    // Hash new password
-    const newPasswordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    // Hash new password using Bun's native bcrypt
+    const newPasswordHash = await Bun.password.hash(newPassword, {
+      algorithm: "bcrypt",
+      cost: 10,
+    });
 
     // Update in database (we'd need to add this method to DatabaseManager)
     // For now, we'll create a new method
@@ -186,8 +189,8 @@ export class AuthService {
       throw new Error("No user logged in");
     }
 
-    // Verify password before deletion
-    const isValid = await bcrypt.compare(
+    // Verify password before deletion using Bun's native bcrypt
+    const isValid = await Bun.password.verify(
       password,
       this.currentUser.password_hash
     );

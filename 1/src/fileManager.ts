@@ -20,6 +20,20 @@ export class FileManager {
   }
 
   /**
+   * Get the lock manager instance
+   */
+  getLockManager(): FileLockManager {
+    return this.lockManager;
+  }
+
+  /**
+   * Get the path validator instance
+   */
+  getPathValidator(): PathValidator {
+    return this.pathValidator;
+  }
+
+  /**
    * Reads a file securely
    */
   async readFile(filePath: string, userId: number): Promise<string> {

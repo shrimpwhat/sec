@@ -8,11 +8,13 @@ import { SECURITY_CONFIG } from "../config/security";
  */
 export class FileLockManager {
   private lockDir: string;
+  private activeLocks: Map<string, number>; // Track locks held by this process
 
   constructor(
     lockDir: string = path.join(SECURITY_CONFIG.BASE_DIRECTORY, ".locks")
   ) {
     this.lockDir = lockDir;
+    this.activeLocks = new Map();
     // Ensure lock directory exists
     if (!fs.existsSync(this.lockDir)) {
       fs.mkdirSync(this.lockDir, { recursive: true });
@@ -23,7 +25,6 @@ export class FileLockManager {
    * Gets the lock file path for a given file
    */
   private getLockFilePath(filePath: string): string {
-    // Create a safe lock filename based on the original file path
     const hash = Buffer.from(filePath)
       .toString("base64")
       .replace(/[/+=]/g, "_");
@@ -33,12 +34,38 @@ export class FileLockManager {
   /**
    * Acquires an OS-level exclusive lock for a file operation
    * Uses file system locks that work across processes
+   * Supports re-entrant locking (same process can acquire lock multiple times)
    */
   async acquireLock(filePath: string): Promise<() => void> {
     const lockFile = this.getLockFilePath(filePath);
+
+    // Check if this process already holds the lock (re-entrant)
+    if (this.activeLocks.has(lockFile)) {
+      const count = this.activeLocks.get(lockFile)!;
+      this.activeLocks.set(lockFile, count + 1);
+
+      // Return a release function that just decrements the counter
+      return () => {
+        const currentCount = this.activeLocks.get(lockFile)!;
+        if (currentCount > 1) {
+          this.activeLocks.set(lockFile, currentCount - 1);
+        } else {
+          // Last reference, actually release the lock
+          this.activeLocks.delete(lockFile);
+          try {
+            if (fs.existsSync(lockFile)) {
+              fs.unlinkSync(lockFile);
+            }
+          } catch (error) {
+            console.error("Error releasing lock:", error);
+          }
+        }
+      };
+    }
+
     let fd: number | null = null;
-    const maxRetries = 50;
-    const retryDelay = 100; // ms
+    const maxRetries = 10;
+    const retryDelay = 50; // ms
 
     // Try to create an exclusive lock file
     for (let i = 0; i < maxRetries; i++) {
@@ -58,24 +85,33 @@ export class FileLockManager {
 
     if (fd === null) {
       throw new Error(
-        `Unable to acquire lock for ${filePath} after ${maxRetries} retries`
+        `Unable to acquire lock for ${filePath}. File may be locked by another process.`
       );
     }
 
     // Write process ID to lock file for debugging
     fs.writeSync(fd, `${process.pid}\n${new Date().toISOString()}`);
+    fs.closeSync(fd);
+
+    // Mark as held by this process
+    this.activeLocks.set(lockFile, 1);
 
     // Return release function
     return () => {
-      try {
-        if (fd !== null) {
-          fs.closeSync(fd);
+      const currentCount = this.activeLocks.get(lockFile);
+      if (!currentCount) return; // Already released
+
+      if (currentCount > 1) {
+        this.activeLocks.set(lockFile, currentCount - 1);
+      } else {
+        this.activeLocks.delete(lockFile);
+        try {
+          if (fs.existsSync(lockFile)) {
+            fs.unlinkSync(lockFile);
+          }
+        } catch (error) {
+          console.error("Error releasing lock:", error);
         }
-        if (fs.existsSync(lockFile)) {
-          fs.unlinkSync(lockFile);
-        }
-      } catch (error) {
-        console.error("Error releasing lock:", error);
       }
     };
   }

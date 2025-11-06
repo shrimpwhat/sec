@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import path from "path";
 
 export interface User {
   id: number;
@@ -27,9 +28,8 @@ export interface Operation {
 export class DatabaseManager {
   private db: Database;
 
-  constructor(dbPath: string = "./filemanager.db") {
+  constructor(dbPath: string = path.join(__dirname, "../", "filemanager.db")) {
     this.db = new Database(dbPath, { create: true });
-    this.db.run("PRAGMA journal_mode = WAL;");
     this.initDatabase();
   }
 

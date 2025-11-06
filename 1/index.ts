@@ -218,10 +218,22 @@ class FileManagerApp {
 
   private async createFile(userId: number): Promise<void> {
     const filename = await this.question("Filename (with extension): ");
-    const content = await this.question("File content: ");
 
-    await this.fileManager.writeFile(filename, content, userId);
-    console.log("✓ File created successfully");
+    // Acquire lock before asking for content
+    const lockManager = this.fileManager.getLockManager();
+    const pathValidator = this.fileManager.getPathValidator();
+    const sanitizedFilename = pathValidator.sanitizeFilename(filename);
+    const validPath = pathValidator.validatePath(sanitizedFilename);
+    const release = await lockManager.acquireLock(validPath);
+
+    try {
+      const content = await this.question("File content: ");
+
+      await this.fileManager.writeFile(filename, content, userId);
+      console.log("✓ File created successfully");
+    } finally {
+      release();
+    }
   }
 
   private async readFile(userId: number): Promise<void> {
@@ -234,23 +246,45 @@ class FileManagerApp {
 
   private async modifyFile(userId: number): Promise<void> {
     const filename = await this.question("Filename: ");
-    const content = await this.question("New content: ");
 
-    await this.fileManager.writeFile(filename, content, userId);
-    console.log("✓ File modified successfully");
+    // Acquire lock before asking for content
+    const lockManager = this.fileManager.getLockManager();
+    const pathValidator = this.fileManager.getPathValidator();
+    const validPath = pathValidator.validatePath(filename);
+    const release = await lockManager.acquireLock(validPath);
+
+    try {
+      const content = await this.question("New content: ");
+
+      await this.fileManager.writeFile(filename, content, userId);
+      console.log("✓ File modified successfully");
+    } finally {
+      release();
+    }
   }
 
   private async deleteFile(userId: number): Promise<void> {
     const filename = await this.question("Filename: ");
-    const confirm = await this.question(
-      `Delete file "${filename}"? (yes/no): `
-    );
 
-    if (confirm.toLowerCase() === "yes" || confirm.toLowerCase() === "y") {
-      await this.fileManager.deleteFile(filename, userId);
-      console.log("✓ File deleted successfully");
-    } else {
-      console.log("Cancelled");
+    // Acquire lock before asking for confirmation
+    const lockManager = this.fileManager.getLockManager();
+    const pathValidator = this.fileManager.getPathValidator();
+    const validPath = pathValidator.validatePath(filename);
+    const release = await lockManager.acquireLock(validPath);
+
+    try {
+      const confirm = await this.question(
+        `Delete file "${filename}"? (yes/no): `
+      );
+
+      if (confirm.toLowerCase() === "yes" || confirm.toLowerCase() === "y") {
+        await this.fileManager.deleteFile(filename, userId);
+        console.log("✓ File deleted successfully");
+      } else {
+        console.log("Cancelled");
+      }
+    } finally {
+      release();
     }
   }
 
@@ -600,7 +634,7 @@ class FileManagerApp {
   private async clearStorage(): Promise<void> {
     try {
       console.log(
-        "\n⚠️  WARNING: This will delete ALL files in the storage directory!"
+        "\nWARNING: This will delete ALL files in the storage directory!"
       );
       const confirm = await this.question(
         "Are you sure you want to clear storage? Type 'YES' to confirm: "
@@ -637,7 +671,6 @@ class FileManagerApp {
   private cleanup(): void {
     this.rl.close();
     this.db.close();
-    console.log("\n✓ Application closed. Goodbye!");
   }
 }
 

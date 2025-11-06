@@ -73,14 +73,9 @@ export class ZipManager {
       const relativeFiles = validFiles.map((f) => path.relative(baseDir, f));
 
       // Create zip using native commands
-      const zipCommand =
-        process.platform === "win32"
-          ? `powershell Compress-Archive -Path ${relativeFiles
-              .map((f) => `"${f}"`)
-              .join(",")} -DestinationPath "${validOutputPath}"`
-          : `cd "${baseDir}" && zip -q "${validOutputPath}" ${relativeFiles
-              .map((f) => `"${f}"`)
-              .join(" ")}`;
+      const zipCommand = `cd "${baseDir}" && zip -q "${validOutputPath}" ${relativeFiles
+        .map((f) => `"${f}"`)
+        .join(" ")}`;
 
       await execAsync(zipCommand);
 
@@ -150,10 +145,7 @@ export class ZipManager {
 
     try {
       // Extract using system command
-      const unzipCommand =
-        process.platform === "win32"
-          ? `powershell Expand-Archive -Path "${validZipPath}" -DestinationPath "${validOutputPath}" -Force`
-          : `unzip -q -o "${validZipPath}" -d "${validOutputPath}"`;
+      const unzipCommand = `unzip -q -o "${validZipPath}" -d "${validOutputPath}"`;
 
       await execAsync(unzipCommand);
 
@@ -186,39 +178,11 @@ export class ZipManager {
   private async analyzeZip(zipPath: string): Promise<ZipEntry[]> {
     try {
       // Use system command to list ZIP contents
-      const listCommand =
-        process.platform === "win32"
-          ? `powershell "Add-Type -A System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::OpenRead('${zipPath}').Entries | Select-Object Name,CompressedLength,Length | ConvertTo-Json"`
-          : `unzip -l -v "${zipPath}"`;
+      const listCommand = `unzip -l -v "${zipPath}"`;
 
       const { stdout } = await execAsync(listCommand);
 
-      if (process.platform === "win32") {
-        // Parse PowerShell JSON output
-        const entries = JSON.parse(stdout);
-        return Array.isArray(entries)
-          ? entries.map((e: any) => ({
-              name: e.Name,
-              compressedSize: e.CompressedLength,
-              uncompressedSize: e.Length,
-              compressionRatio:
-                e.CompressedLength > 0 ? e.Length / e.CompressedLength : 0,
-            }))
-          : [
-              {
-                name: entries.Name,
-                compressedSize: entries.CompressedLength,
-                uncompressedSize: entries.Length,
-                compressionRatio:
-                  entries.CompressedLength > 0
-                    ? entries.Length / entries.CompressedLength
-                    : 0,
-              },
-            ];
-      } else {
-        // Parse unzip -l -v output
-        return this.parseUnzipOutput(stdout);
-      }
+      return this.parseUnzipOutput(stdout);
     } catch (error) {
       throw new Error(
         `Failed to analyze ZIP: ${
@@ -236,22 +200,25 @@ export class ZipManager {
     const lines = output.split("\n");
 
     for (const line of lines) {
-      // Parse lines like: "  1234  Defl:N      567  54% 2024-01-01 12:00 filename.txt"
       const match = line.match(
-        /^\s*(\d+)\s+\w+:?\w*\s+(\d+)\s+\d+%.*?\s+(.+)$/
+        /^\s*(\d+)\s+\S+\s+(\d+)\s+\d+%\s+\d{2}-\d{2}-\d{4}\s+\d{2}:\d{2}\s+[0-9a-fA-F]+\s+(.+)$/
       );
+
       if (match && match[1] && match[2] && match[3]) {
         const uncompressedSize = parseInt(match[1], 10);
         const compressedSize = parseInt(match[2], 10);
         const name = match[3].trim();
 
-        entries.push({
-          name,
-          compressedSize,
-          uncompressedSize,
-          compressionRatio:
-            compressedSize > 0 ? uncompressedSize / compressedSize : 0,
-        });
+        // Skip directory entries and summary lines
+        if (name && !name.includes("files") && !name.startsWith("-")) {
+          entries.push({
+            name,
+            compressedSize,
+            uncompressedSize,
+            compressionRatio:
+              compressedSize > 0 ? uncompressedSize / compressedSize : 0,
+          });
+        }
       }
     }
 

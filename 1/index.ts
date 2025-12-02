@@ -1,4 +1,5 @@
 import * as readline from "readline";
+import * as fs from "fs";
 import { DatabaseManager } from "./src/database";
 import { AuthService } from "./src/auth";
 import { FileManager } from "./src/fileManager";
@@ -22,6 +23,9 @@ class FileManagerApp {
   private rl: readline.Interface;
 
   constructor() {
+    if (!fs.existsSync(SECURITY_CONFIG.BASE_DIRECTORY)) {
+      fs.mkdirSync(SECURITY_CONFIG.BASE_DIRECTORY, { recursive: true });
+    }
     this.db = new DatabaseManager();
     this.auth = new AuthService(this.db);
     this.fileManager = new FileManager(this.db);

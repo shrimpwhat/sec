@@ -17,3 +17,5 @@ bun install
 ```bash
 bun start
 ```
+
+<img width="388" height="230" alt="image" src="https://github.com/user-attachments/assets/cb5e4a93-9f4d-4c52-986e-ab582bff1965" />

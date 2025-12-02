@@ -31,6 +31,26 @@ export class ZipManager {
   }
 
   /**
+   * Verifies that the user owns the file
+   */
+  private verifyFileOwnership(filePath: string, userId: number): void {
+    const relativePath = path.relative(
+      this.pathValidator.getBaseDir(),
+      this.pathValidator.validatePath(filePath)
+    );
+
+    // Get all files owned by the user
+    const userFiles = this.db.getFilesByOwner(userId);
+    const fileRecord = userFiles.find((f) => f.location === relativePath);
+
+    if (!fileRecord) {
+      throw new Error(
+        "Access denied: You do not have permission to access this file"
+      );
+    }
+  }
+
+  /**
    * Creates a ZIP archive from files
    */
   async createZip(
@@ -54,6 +74,9 @@ export class ZipManager {
       if (!fs.existsSync(validPath)) {
         throw new Error(`File not found: ${file}`);
       }
+
+      // Verify ownership of each file being added to the ZIP
+      this.verifyFileOwnership(file, userId);
 
       const stats = fs.statSync(validPath);
       if (stats.isDirectory()) {
@@ -124,6 +147,9 @@ export class ZipManager {
     if (!fs.existsSync(validZipPath)) {
       throw new Error("ZIP file not found");
     }
+
+    // Verify ownership of the ZIP file
+    this.verifyFileOwnership(zipPath, userId);
 
     // Validate ZIP file size
     const zipStats = fs.statSync(validZipPath);
@@ -298,6 +324,9 @@ export class ZipManager {
     if (!fs.existsSync(validZipPath)) {
       throw new Error("ZIP file not found");
     }
+
+    // Verify ownership of the ZIP file
+    this.verifyFileOwnership(zipPath, userId);
 
     const entries = await this.analyzeZip(validZipPath);
 

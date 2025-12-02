@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import path from "path";
+import { SECURITY_CONFIG } from "./utils/security";
 
 export interface User {
   id: number;
@@ -28,7 +29,8 @@ export interface Operation {
 export class DatabaseManager {
   private db: Database;
 
-  constructor(dbPath: string = path.join(__dirname, "../", "filemanager.db")) {
+  constructor(dbPath?: string) {
+    dbPath = path.resolve(SECURITY_CONFIG.BASE_DIRECTORY, "filemanager.db");
     this.db = new Database(dbPath, { create: true });
     this.initDatabase();
   }

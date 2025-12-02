@@ -11,5 +11,5 @@ export const SECURITY_CONFIG = {
   MAX_UNCOMPRESSED_SIZE: 500 * 1024 * 1024, // 500 MB uncompressed
   MAX_COMPRESSION_RATIO: 100, // Maximum compression ratio to prevent ZIP bombs
   ALLOWED_FILE_EXTENSIONS: [".txt", ".json", ".xml", ".zip", ".log"],
-  BASE_DIRECTORY: path.resolve(process.cwd(), "storage"),
+  BASE_DIRECTORY: path.resolve("storage"),
 };

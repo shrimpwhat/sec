@@ -20,6 +20,42 @@ export class FileManager {
   }
 
   /**
+   * Verifies that the user owns the file and returns the file record
+   */
+  private verifyFileOwnership(
+    filePath: string,
+    userId: number
+  ): import("./database").FileRecord {
+    // Use the validated and resolved path for consistency
+    const validPath = this.pathValidator.validatePath(filePath);
+    const relativePath = path.relative(
+      this.pathValidator.getBaseDir(),
+      validPath
+    );
+
+    // Get all files owned by the user
+    const userFiles = this.db.getFilesByOwner(userId);
+    const fileRecord = userFiles.find((f) => f.location === relativePath);
+
+    if (!fileRecord) {
+      throw new Error(
+        "Access denied: You do not have permission to access this file"
+      );
+    }
+
+    return fileRecord;
+  }
+
+  /**
+   * Checks if a path is a system file that should not be accessed
+   */
+  private isSystemFile(filePath: string): boolean {
+    return (
+      filePath.includes(".locks") || path.basename(filePath).startsWith(".")
+    );
+  }
+
+  /**
    * Get the lock manager instance
    */
   getLockManager(): FileLockManager {
@@ -37,12 +73,20 @@ export class FileManager {
    * Reads a file securely
    */
   async readFile(filePath: string, userId: number): Promise<string> {
+    // Prevent access to .locks directory and files
+    if (this.isSystemFile(filePath)) {
+      throw new Error("Access denied: Cannot access system files");
+    }
+
     const validPath = this.pathValidator.validatePath(filePath);
 
     return this.lockManager.withLock(validPath, async () => {
       if (!fs.existsSync(validPath)) {
         throw new Error("File does not exist");
       }
+
+      // Verify file ownership
+      this.verifyFileOwnership(filePath, userId);
 
       const stats = fs.statSync(validPath);
       FileSizeValidator.validateFileSize(stats.size);
@@ -69,6 +113,11 @@ export class FileManager {
     content: string,
     userId: number
   ): Promise<void> {
+    // Prevent access to .locks directory and files
+    if (this.isSystemFile(filePath)) {
+      throw new Error("Access denied: Cannot access system files");
+    }
+
     const filename = path.basename(filePath);
     const sanitizedFilename = this.pathValidator.sanitizeFilename(filename);
     const validPath = this.pathValidator.validatePath(sanitizedFilename);
@@ -91,6 +140,11 @@ export class FileManager {
 
       const fileExists = fs.existsSync(validPath);
       const operationType = fileExists ? "modify" : "create";
+
+      // If file exists, verify ownership before modifying
+      if (fileExists) {
+        this.verifyFileOwnership(sanitizedFilename, userId);
+      }
 
       // Write file atomically
       const tempPath = `${validPath}.tmp`;
@@ -138,6 +192,11 @@ export class FileManager {
    * Deletes a file securely
    */
   async deleteFile(filePath: string, userId: number): Promise<void> {
+    // Prevent access to .locks directory and files
+    if (this.isSystemFile(filePath)) {
+      throw new Error("Access denied: Cannot access system files");
+    }
+
     const validPath = this.pathValidator.validatePath(filePath);
 
     return this.lockManager.withLock(validPath, async () => {
@@ -145,40 +204,25 @@ export class FileManager {
         throw new Error("File does not exist");
       }
 
-      const relativePath = path.relative(
-        this.pathValidator.getBaseDir(),
-        validPath
-      );
-
-      // Find file record
-      const files = this.db.getFilesByOwner(userId);
-      const fileRecord = files.find((f) => f.location === relativePath);
+      // Verify file ownership and get the record
+      const fileRecord = this.verifyFileOwnership(filePath, userId);
 
       // Delete the file
       fs.unlinkSync(validPath);
 
       // Update database
-      if (fileRecord) {
-        this.db.deleteFile(fileRecord.id);
-        this.db.logOperation(
-          "delete",
-          userId,
-          fileRecord.id,
-          `Deleted file: ${path.basename(filePath)}`
-        );
-      } else {
-        this.db.logOperation(
-          "delete",
-          userId,
-          null,
-          `Deleted file: ${path.basename(filePath)}`
-        );
-      }
+      this.db.deleteFile(fileRecord.id);
+      this.db.logOperation(
+        "delete",
+        userId,
+        fileRecord.id,
+        `Deleted file: ${path.basename(filePath)}`
+      );
     });
   }
 
   /**
-   * Lists files in a directory
+   * Lists files in a directory (only shows user's own files)
    */
   async listFiles(dirPath: string = ".", userId: number): Promise<string[]> {
     const validPath = this.pathValidator.validatePath(dirPath);
@@ -192,7 +236,19 @@ export class FileManager {
       throw new Error("Path is not a directory");
     }
 
-    const files = fs.readdirSync(validPath);
+    // Get all files from filesystem
+    const allFiles = fs.readdirSync(validPath);
+
+    // Get user's files from database
+    const userFiles = this.db.getFilesByOwner(userId);
+    const userFileNames = new Set(
+      userFiles.map((f) => path.basename(f.location))
+    );
+
+    // Filter to only show files owned by the user, excluding system files
+    const files = allFiles.filter(
+      (file) => userFileNames.has(file) && !this.isSystemFile(file)
+    );
 
     // Log the operation
     this.db.logOperation("read", userId, null, `Listed directory: ${dirPath}`);
@@ -208,6 +264,11 @@ export class FileManager {
     destPath: string,
     userId: number
   ): Promise<void> {
+    // Prevent access to .locks directory and files
+    if (this.isSystemFile(sourcePath) || this.isSystemFile(destPath)) {
+      throw new Error("Access denied: Cannot access system files");
+    }
+
     const validSourcePath = this.pathValidator.validatePath(sourcePath);
     const destFilename = this.pathValidator.sanitizeFilename(
       path.basename(destPath)
@@ -217,6 +278,9 @@ export class FileManager {
     if (!fs.existsSync(validSourcePath)) {
       throw new Error("Source file does not exist");
     }
+
+    // Verify ownership of source file
+    this.verifyFileOwnership(sourcePath, userId);
 
     const stats = fs.statSync(validSourcePath);
     FileSizeValidator.validateFileSize(stats.size);
@@ -265,6 +329,11 @@ export class FileManager {
     modified: Date;
     isDirectory: boolean;
   }> {
+    // Prevent access to .locks directory and files
+    if (this.isSystemFile(filePath)) {
+      throw new Error("Access denied: Cannot access system files");
+    }
+
     const validPath = this.pathValidator.validatePath(filePath);
 
     if (!fs.existsSync(validPath)) {
@@ -272,6 +341,11 @@ export class FileManager {
     }
 
     const stats = fs.statSync(validPath);
+
+    // Only verify ownership for files (not directories)
+    if (!stats.isDirectory()) {
+      this.verifyFileOwnership(filePath, userId);
+    }
 
     this.db.logOperation(
       "read",

@@ -598,13 +598,13 @@ class FileManagerApp {
 
     const operations = this.auth.getUserActivity(numLimit);
 
-    console.log(`${"Time".padEnd(20)} ${"Operation".padEnd(10)} ${"Details"}`);
+    console.log(`${"Time".padEnd(30)} ${"Operation".padEnd(10)} ${"Details"}`);
     console.log("-".repeat(80));
 
     operations.forEach((op) => {
       const time = new Date(op.timestamp).toLocaleString();
       console.log(
-        `${time.padEnd(20)} ${op.operation_type.padEnd(10)} ${op.details}`
+        `${time.padEnd(30)} ${op.operation_type.padEnd(10)} ${op.details}`
       );
     });
 
